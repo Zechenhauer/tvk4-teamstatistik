@@ -490,6 +490,8 @@
         if (!name) return "";
         let n = name.trim();
         if (n.toLowerCase() === "patrik seitz") return "Patrick Seitz";
+        // Korrektur für Tippfehler in den Rohdaten: "Heinz Lukat" wird direkt auf "Heinz Lukas" gemappt
+        if (n.toLowerCase() === "heinz lukat") return "Heinz Lukas";
         return n;
     }
 
@@ -535,12 +537,28 @@
             return isNaN(num) ? 0 : parseFloat(num.toFixed(1));
         };
 
+        // Feste Stammspieler für Team 4 definieren
+        let festeStammSpieler = ["heinz lukas"];
+
         let team4PlayerNames = [];
         playerStatsRows.forEach(row => {
             let playerTeam = String(row.team || "").trim().toLowerCase();
             let name = normalizeName(row.name || row.spieler);
-            if (playerTeam.includes("4. mannschaft") && name) {
-                team4PlayerNames.push(name);
+            if ((playerTeam.includes("4. mannschaft") || playerTeam.includes("team 4")) && name) {
+                if (!team4PlayerNames.some(p => p.toLowerCase() === name.toLowerCase())) {
+                    team4PlayerNames.push(name);
+                }
+            }
+        });
+
+        // Feste Stammspieler zwingend aufnehmen
+        festeStammSpieler.forEach(stammName => {
+            let found = playerStatsRows.find(row => normalizeName(row.name || row.spieler).toLowerCase() === stammName);
+            if (found) {
+                let actualName = normalizeName(found.name || found.spieler);
+                if (!team4PlayerNames.some(p => p.toLowerCase() === actualName.toLowerCase())) {
+                    team4PlayerNames.push(actualName);
+                }
             }
         });
 
@@ -735,9 +753,13 @@
         });
 
         team4PlayerNames.forEach(name => {
+            // Ignoriere den Duplikat-Namen falls er irgendwo isoliert hängen sollte
+            if (name.toLowerCase() === "heinz lukat") return;
+
             let dbRow = dbStatsMap[name.toLowerCase()] || {};
             let playerTeam = String(dbRow.team || "").trim().toLowerCase();
-            let isAushilfe = !playerTeam.includes("4. mannschaft");
+            
+            let isAushilfe = !festeStammSpieler.includes(name.toLowerCase()) && !playerTeam.includes("4. mannschaft") && !playerTeam.includes("team 4");
 
             teamPlayerStats.push({
                 name: name,
