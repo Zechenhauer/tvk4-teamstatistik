@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TV Kapellen 1919 e.V. - Team 4 Leistungs-Dashboard</title>
+    <!-- Supabase & Chart.js über CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #0b0b0b;
+            --card-bg: #181818;
+            --accent-gold: #FFCC00;
+            --accent-red: #DD0000;
+            --text-color: #f0f0f0;
+            --text-muted: #888;
+            --border-color: #333;
+            --success-color: #2e7d32;
+            --loss-color: #c62828;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 15px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.7);
+            border-top: 5px solid var(--accent-gold);
+            border-bottom: 5px solid var(--accent-red);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .loading-overlay {
+            display: flex;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            border-radius: 12px;
+            z-index: 5;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--accent-gold);
+        }
+
+        /* Banner Header */
+        .banner-header {
+            width: 100%;
+            max-height: 160px;
+            object-fit: cover;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* Team Statistik-Kachel */
+        .team-stats-card {
+            background: linear-gradient(135deg, rgba(221, 0, 0, 0.15), rgba(255, 204, 0, 0.15));
+            border: 1px solid var(--accent-gold);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .team-stats-header {
+            font-weight: bold;
+            font-size: 1.05rem;
+            color: var(--accent-gold);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+            padding-bottom: 10px;
+        }
+
+        .team-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .team-stat-box {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 12px 8px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .team-stat-box.wide-box {
+            grid-column: span 2;
+            padding: 12px 10px;
+            background: rgba(0, 0, 0, 0.6);
+            border-color: var(--accent-gold);
+            gap: 8px;
+        }
+
+        .team-stat-value {
+            font-size: 1.15rem;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .team-stat-subtext {
+            font-size: 0.65rem;
+            color: var(--accent-gold);
+            margin-top: 3px;
+            font-weight: 600;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .team-stat-label {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .large-items-container {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .large-item-row {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 6px 8px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .large-item-val {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .large-item-name {
+            font-size: 0.72rem;
+            color: var(--accent-gold);
+            margin-top: 2px;
+            font-weight: 600;
+        }
+
+        h2.group-title {
+            font-size: 1.1rem;
+            margin-top: 25px;
+            margin-bottom: 12px;
+            color: var(--accent-gold);
+            border-left: 3px solid var(--accent-red);
+            padding-left: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Erweiterte Spieler-Karten */
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .player-card {
+            background: #121212;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .player-card:hover {
+            border-color: var(--accent-gold);
+            transform: translateY(-2px);
+        }
+
+        .player-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .player-card-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid var(--accent-gold);
+            background: #000;
+        }
+
+        .player-card-info {
+            flex-grow: 1;
+        }
+
+        .player-card-name {
+            font-weight: bold;
+            font-size: 0.95rem;
+            color: #fff;
+        }
+
+        .player-card-team {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .player-card-team.aushilfe {
+            color: var(--accent-gold);
+            font-weight: bold;
+        }
+
+        .player-card-avg-badge {
+            background: rgba(255, 204, 0, 0.1);
+            border: 1px solid var(--accent-gold);
+            border-radius: 6px;
+            padding: 4px 10px;
+            text-align: center;
+        }
+
+        .player-card-avg-val {
+            font-size: 1.1rem;
+            font-weight: 900;
+            color: var(--accent-gold);
+        }
+
+        .player-card-avg-label {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .player-metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 5px;
+            background: rgba(0,0,0,0.3);
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-val {
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .metric-lbl {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .player-extras-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+            background: rgba(255, 204, 0, 0.04);
+            border: 1px solid rgba(255, 204, 0, 0.15);
+            padding: 8px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .extra-item {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .extra-val {
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: var(--accent-gold);
+        }
+
+        .extra-lbl {
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+
+        .form-dots {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 2px;
+        }
+
+        .form-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            font-size: 0.6rem;
+            line-height: 12px;
+            font-weight: bold;
+            color: #fff;
+            text-align: center;
+        }
+        .form-dot.win { background-color: var(--success-color); }
+        .form-dot.loss { background-color: var(--loss-color); }
+
+        .chart-card {
+            background: #121212;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 768px) {
+            .team-stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .team-stat-box.wide-box { grid-column: span 2; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="loading-overlay" id="loadingOverlay">Lade Team 4 Dashboard...</div>
+
+    <!-- Banner-Grafik Team 4 -->
+    <img src="https://lhusylpjnujlqomougmg.supabase.co/storage/v1/object/public/Bilder/tv%20kapellen%204.png" alt="TV Kapellen 4 Banner" class="banner-header">
+
+    <!-- Team Statistik-Kachel -->
+    <div class="team-stats-card">
+        <div class="team-stats-header">
+            <span>🏆 Team 4 Leistungskennzahlen & Highlights</span>
+            <span style="font-size: 0.8rem; background: rgba(0,0,0,0.5); padding: 4px 10px; border-radius: 4px; color: var(--accent-gold);">Saison 2026</span>
+        </div>
+        <div class="team-stats-grid">
+            <div class="team-stat-box">
+                <div class="team-stat-value" id="teamStatGP">0</div>
+                <div class="team-stat-label">Gesamt-Matches</div>
+            </div>
+            <div class="team-stat-box">
+                <div class="team-stat-value" id="teamStatWDL">0-0</div>
+                <div class="team-stat-label">Team-Bilanz (S/N)</div>
+            </div>
+            <div class="team-stat-box" style="border-color: var(--accent-gold);">
+                <div class="team-stat-value" id="teamStatAvg" style="color: var(--accent-gold);">0.00</div>
+                <div class="team-stat-label">Team Durchschnitt</div>
+            </div>
+            <div class="team-stat-box" style="border-color: var(--accent-gold);">
+                <div class="team-stat-value" id="teamStat140Val" style="color: var(--accent-gold);">0</div>
+                <div class="team-stat-subtext" id="teamStat140Name">-</div>
+                <div class="team-stat-label">Meiste 140er</div>
+            </div>
+            
+            <!-- Linke Groß-Box: Top Match-Bilanzen -->
+            <div class="team-stat-box wide-box">
+                <div class="large-items-container" id="teamStatTop3Container">
+                    <div style="color:var(--text-muted); font-size:0.7rem; text-align:center;">Lade Bilanzen...</div>
+                </div>
+                <div class="team-stat-label">Top Match-Bilanzen</div>
+            </div>
+
+            <!-- Rechte Groß-Box: Team-Highlights -->
+            <div class="team-stat-box wide-box" style="border-color: var(--accent-gold);">
+                <div class="large-items-container" id="teamStatHighlightsContainer">
+                    <div style="color:var(--text-muted); font-size:0.7rem; text-align:center;">Lade Highlights...</div>
+                </div>
+                <div class="team-stat-label">Team Highlights (180 / HF / Short Leg)</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Grafische Spieler-Karten -->
+    <h2 class="group-title">👥 Mannschaft & Aushilfen</h2>
+    <div class="players-grid" id="playersGridContainer"></div>
+
+    <!-- Diagramme -->
+    <h2 class="group-title">📊 Team-Analysen</h2>
+    
+    <div class="chart-card">
+        <div style="font-size: 0.85rem; color: var(--accent-gold); font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">📈 Team-Formverlauf (AVG pro Spieltag)</div>
+        <canvas id="teamTrendChart"></canvas>
+    </div>
+
+    <div class="chart-card">
+        <div style="font-size: 0.85rem; color: var(--accent-gold); font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">🎯 Gesamte Scoring-Verteilung</div>
+        <canvas id="teamScoringChart"></canvas>
+    </div>
+</div>
+
+<script>
+    const SUPABASE_URL = 'https://lhusylpjnujlqomougmg.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_yXEueWILvAq-Vm2VfTuYyg_BIQeE1KK';
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let chartsInstances = {};
+
+    const valueAboveBarPlugin = {
+        id: 'valueAboveBar',
+        afterDatasetsDraw(chart) {
+            if (chart.config.type !== 'bar') return;
+            const { ctx } = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                meta.data.forEach((element, index) => {
+                    const value = dataset.data[index];
+                    if (value > 0) {
+                        ctx.fillStyle = '#f0f0f0';
+                        ctx.font = 'bold 11px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        const position = element.tooltipPosition();
+                        ctx.fillText(value, position.x, position.y - 6);
+                    }
+                });
+            });
+        }
+    };
+
+    const valueAbovePointPlugin = {
+        id: 'valueAbovePoint',
+        afterDatasetsDraw(chart) {
+            if (chart.config.type !== 'line') return;
+            const { ctx } = chart;
+            chart.data.datasets.forEach((dataset, i) => {
+                const meta = chart.getDatasetMeta(i);
+                meta.data.forEach((element, index) => {
+                    const value = dataset.data[index];
+                    if (value !== null && value !== undefined) {
+                        ctx.fillStyle = '#FFCC00';
+                        ctx.font = 'bold 11px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'bottom';
+                        ctx.fillText(value.toFixed(2), element.x, element.y - 10);
+                    }
+                });
+            });
+        }
+    };
+
+    Chart.register(valueAboveBarPlugin, valueAbovePointPlugin);
+
+    window.onload = function() {
+        loadTeamDashboardData();
+    };
+
+    function normalizeName(name) {
+        if (!name) return "";
+        let n = name.trim();
+        if (n.toLowerCase() === "patrik seitz") return "Patrick Seitz";
+        return n;
+    }
+
+    async function loadTeamDashboardData() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        try {
+            let { data: spieltageData } = await supabaseClient
+                .from('spieltage_t4')
+                .select('*, matches_t4 (*, scoring_stats_t4 (*))');
+
+            let { data: playerStatsData } = await supabaseClient
+                .from('player_stats_2026')
+                .select('*');
+
+            processAndRenderData(spieltageData || [], playerStatsData || []);
+        } catch (err) {
+            console.error("Fehler beim Laden:", err);
+        } finally {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+    }
+
+    function processAndRenderData(spieltage, playerStatsRows) {
+        let teamMatches = [];
+        let totalWins = 0, totalLosses = 0;
+
+        let player180Counts = {};
+        let player140Counts = {};
+        let playerMatchStats = {};
+        let playerBestLegs = {}; 
+        let playerFormHistory = {}; 
+        
+        let maxHighFinishVal = 0;
+        let maxHighFinishPlayer = "-";
+        
+        let bestShortGameDarts = 999;
+        let shortGamePlayersMap = {};
+
+        const cleanVal = (val) => {
+            if (val === null || val === undefined) return 0;
+            let s = String(val).replace('Ø', '').trim().replace(',', '.');
+            let num = parseFloat(s);
+            return isNaN(num) ? 0 : parseFloat(num.toFixed(1));
+        };
+
+        let team4PlayerNames = [];
+        playerStatsRows.forEach(row => {
+            let playerTeam = String(row.team || "").trim().toLowerCase();
+            let name = normalizeName(row.name || row.spieler);
+            if (playerTeam.includes("4. mannschaft") && name) {
+                team4PlayerNames.push(name);
+            }
+        });
+
+        spieltage.sort((a, b) => (a.spieltag_nummer || 0) - (b.spieltag_nummer || 0));
+
+        spieltage.forEach(st => {
+            let matchesList = st.matches_t4 || [];
+            matchesList.forEach(m => {
+                let scoring = (m.scoring_stats_t4 && m.scoring_stats_t4.length > 0) ? m.scoring_stats_t4[0] : {};
+                let playerName = normalizeName(m.spieler_kapellen);
+                
+                let isEinzel = !((m.block_name || "").toLowerCase().includes("doppel")) && !playerName.includes("/");
+
+                if (playerName && isEinzel && m.avg > 0) {
+                    if (!team4PlayerNames.some(p => p.toLowerCase() === playerName.toLowerCase())) {
+                        team4PlayerNames.push(playerName);
+                    }
+
+                    teamMatches.push({
+                        spieltag: st.spieltag_nummer,
+                        spieler: playerName,
+                        ergebnis: m.ergebnis || "",
+                        avg: m.avg,
+                        s60: scoring.score_60 || 0,
+                        s80: scoring.score_80 || 0,
+                        s100: scoring.score_100 || 0,
+                        s140: scoring.score_140 || 0,
+                        s180: scoring.score_180 || 0,
+                        hf: scoring.high_finish || 0
+                    });
+
+                    if (!playerMatchStats[playerName]) playerMatchStats[playerName] = { wins: 0, losses: 0 };
+                    if (!playerFormHistory[playerName]) playerFormHistory[playerName] = [];
+                    if (!playerBestLegs[playerName]) playerBestLegs[playerName] = 999;
+
+                    if (m.ergebnis && m.ergebnis.includes(":")) {
+                        let p = m.ergebnis.split(":");
+                        let lw = parseInt(p[0]) || 0;
+                        let ll = parseInt(p[1]) || 0;
+                        if (lw > ll) {
+                            totalWins++;
+                            playerMatchStats[playerName].wins++;
+                            playerFormHistory[playerName].push('W');
+                        } else if (ll > lw) {
+                            totalLosses++;
+                            playerMatchStats[playerName].losses++;
+                            playerFormHistory[playerName].push('L');
+                        }
+                    }
+
+                    if (m.darts) {
+                        let dartsStr = String(m.darts);
+                        let legDartsArray = dartsStr.split(',').map(d => parseInt(d.trim())).filter(d => !isNaN(d) && d > 0);
+                        
+                        legDartsArray.forEach(dCount => {
+                            if (dCount < playerBestLegs[playerName]) {
+                                playerBestLegs[playerName] = dCount;
+                            }
+                            
+                            if (dCount < 19) {
+                                if (dCount < bestShortGameDarts) {
+                                    bestShortGameDarts = dCount;
+                                    shortGamePlayersMap = {};
+                                    shortGamePlayersMap[playerName] = true;
+                                } else if (dCount === bestShortGameDarts) {
+                                    shortGamePlayersMap[playerName] = true;
+                                }
+                            }
+                        });
+                    }
+
+                    let r180 = scoring.score_180 || 0;
+                    if (r180 > 0) {
+                        player180Counts[playerName] = (player180Counts[playerName] || 0) + r180;
+                    }
+
+                    let r140 = scoring.score_140 || 0;
+                    if (r140 > 0) {
+                        player140Counts[playerName] = (player140Counts[playerName] || 0) + r140;
+                    }
+
+                    let hf = scoring.high_finish || 0;
+                    if (hf > maxHighFinishVal) {
+                        maxHighFinishVal = hf;
+                        maxHighFinishPlayer = playerName;
+                    }
+                }
+            });
+        });
+
+        // Top Match-Bilanzen gruppieren nach gleicher Bilanz
+        let allPlayerBilanzen = Object.entries(playerMatchStats).map(([name, stats]) => {
+            let total = stats.wins + stats.losses;
+            let winRate = total > 0 ? stats.wins / total : 0;
+            let diff = stats.wins - stats.losses;
+            return { name: name, wins: stats.wins, losses: stats.losses, diff: diff, winRate: winRate };
+        }).sort((a, b) => {
+            if (b.diff !== a.diff) return b.diff - a.diff;
+            if (b.winRate !== a.winRate) return b.winRate - a.winRate;
+            return b.wins - a.wins;
+        });
+
+        let groupedBilanzen = [];
+        let rankCounter = 1;
+        allPlayerBilanzen.forEach((p) => {
+            let existingGroup = groupedBilanzen.find(g => g.wins === p.wins && g.losses === p.losses);
+            if (existingGroup) {
+                existingGroup.names.push(p.name);
+            } else {
+                if (groupedBilanzen.length < 3) {
+                    let medal = rankCounter === 1 ? '🥇 ' : (rankCounter === 2 ? '🥈 ' : '🥉 ');
+                    groupedBilanzen.push({
+                        wins: p.wins,
+                        losses: p.losses,
+                        names: [p.name],
+                        medal: medal
+                    });
+                    rankCounter++;
+                }
+            }
+        });
+
+        let top3HTML = '';
+        if (groupedBilanzen.length > 0) {
+            groupedBilanzen.forEach(group => {
+                top3HTML += `
+                    <div class="large-item-row">
+                        <div class="large-item-val">${group.wins}:${group.losses} S/N</div>
+                        <div class="large-item-name">${group.medal}${group.names.join(', ')}</div>
+                    </div>
+                `;
+            });
+        } else {
+            top3HTML = `<div style="color:var(--text-muted); font-size:0.7rem; text-align:center; padding: 10px;">Noch keine Spiele</div>`;
+        }
+        document.getElementById('teamStatTop3Container').innerHTML = top3HTML;
+
+        // Meiste 180er ermitteln
+        let top180Player = "-";
+        let top180Total = 0;
+        Object.entries(player180Counts).forEach(([name, count]) => {
+            if (count > top180Total) {
+                top180Total = count;
+                top180Player = name;
+            }
+        });
+
+        // Meiste 140er ermitteln (Sammeln aller Spieler mit Bestwert)
+        let max140Val = 0;
+        let top140PlayersMap = {};
+        Object.entries(player140Counts).forEach(([name, count]) => {
+            if (count > max140Val) {
+                max140Val = count;
+                top140PlayersMap = {};
+                top140PlayersMap[name] = true;
+            } else if (count === max140Val && count > 0) {
+                top140PlayersMap[name] = true;
+            }
+        });
+
+        let top140List = Object.keys(top140PlayersMap);
+        let top140Text = top140List.length > 0 ? top140List.join(', ') : '-';
+
+        document.getElementById('teamStat140Val').innerText = max140Val > 0 ? `${max140Val}x 140` : '0';
+        document.getElementById('teamStat140Name').innerText = top140Text;
+
+        let shortGamePlayersList = Object.keys(shortGamePlayersMap);
+        let shortGamePlayerText = shortGamePlayersList.length > 0 ? shortGamePlayersList.join(', ') : 'Kein Short Leg';
+
+        let highlightsHTML = `
+            <div class="large-item-row">
+                <div class="large-item-val">${top180Total > 0 ? top180Total + 'x 180' : '0'}</div>
+                <div class="large-item-name">🎯 ${top180Total > 0 ? top180Player : 'Keine 180er'}</div>
+            </div>
+            <div class="large-item-row">
+                <div class="large-item-val">${maxHighFinishVal > 0 ? maxHighFinishVal + ' Pkt.' : '-'}</div>
+                <div class="large-item-name">🔥 ${maxHighFinishVal > 0 ? maxHighFinishPlayer : 'Kein High-Finish'}</div>
+            </div>
+            <div class="large-item-row">
+                <div class="large-item-val">${bestShortGameDarts < 999 ? bestShortGameDarts + ' Darts' : '-'}</div>
+                <div class="large-item-name" style="font-size: 0.65rem;">⚡ ${shortGamePlayerText}</div>
+            </div>
+        `;
+        document.getElementById('teamStatHighlightsContainer').innerHTML = highlightsHTML;
+
+        // Spieler-Karten aufbereiten
+        let teamPlayerStats = [];
+        let dbStatsMap = {};
+        playerStatsRows.forEach(row => {
+            let name = normalizeName(row.name || row.spieler);
+            if (name) dbStatsMap[name.toLowerCase()] = row;
+        });
+
+        team4PlayerNames.forEach(name => {
+            let dbRow = dbStatsMap[name.toLowerCase()] || {};
+            let playerTeam = String(dbRow.team || "").trim().toLowerCase();
+            let isAushilfe = !playerTeam.includes("4. mannschaft");
+
+            teamPlayerStats.push({
+                name: name,
+                avatar: dbRow.avatar || "",
+                schnitt: cleanVal(dbRow.schnitt || dbRow.avg || dbRow.average),
+                o9d: cleanVal(dbRow.ø9d || dbRow.o9d),
+                o12d: cleanVal(dbRow.ø12d || dbRow.o12d),
+                o15d: cleanVal(dbRow.ø15d || dbRow.o15d),
+                o18d: cleanVal(dbRow.ø18d || dbRow.o18d),
+                isAushilfe: isAushilfe
+            });
+        });
+
+        teamPlayerStats.sort((a, b) => b.schnitt - a.schnitt);
+
+        let overallTeamAvg = 0;
+        let validAvgs = teamPlayerStats.filter(p => p.schnitt > 0);
+        if (validAvgs.length > 0) {
+            overallTeamAvg = validAvgs.reduce((acc, p) => acc + p.schnitt, 0) / validAvgs.length;
+        }
+
+        document.getElementById('teamStatGP').innerText = teamMatches.length;
+        document.getElementById('teamStatWDL').innerText = `${totalWins}-${totalLosses}`;
+        document.getElementById('teamStatAvg').innerText = overallTeamAvg > 0 ? overallTeamAvg.toFixed(2) : '0.00';
+
+        // Grafische Spieler-Karten rendern
+        const gridContainer = document.getElementById('playersGridContainer');
+        gridContainer.innerHTML = '';
+
+        teamPlayerStats.forEach(p => {
+            let avatarSrc = p.avatar 
+                ? p.avatar 
+                : `https://ui-avatars.com/api/?name=${encodeURIComponent(p.name)}&background=181818&color=FFCC00&bold=true`;
+
+            let bestLeg = playerBestLegs[p.name];
+            let bestLegText = (bestLeg && bestLeg < 999) ? `${bestLeg} Darts` : '-';
+
+            let history = playerFormHistory[p.name] || [];
+            let lastMatches = history.slice(-5); 
+            let formDotsHTML = '';
+            
+            if (lastMatches.length > 0) {
+                lastMatches.forEach(res => {
+                    let cls = res === 'W' ? 'win' : 'loss';
+                    let txt = res === 'W' ? 'S' : 'N';
+                    formDotsHTML += `<span class="form-dot ${cls}" title="${res === 'W' ? 'Sieg' : 'Niederlage'}">${txt}</span>`;
+                });
+            } else {
+                formDotsHTML = `<span style="color:var(--text-muted); font-size:0.65rem;">Keine Spiele</span>`;
+            }
+
+            let teamSubText = p.isAushilfe ? '⚡ Aushilfe' : 'Stamm-Mannschaft Team 4';
+            let teamSubClass = p.isAushilfe ? 'player-card-team aushilfe' : 'player-card-team';
+
+            let card = document.createElement('div');
+            card.className = 'player-card';
+            card.innerHTML = `
+                <div class="player-card-header">
+                    <img src="${avatarSrc}" class="player-card-avatar" onerror="this.src='https://cdn.jsdelivr.net/npm/@mdi/svg@7.2.96/svg/account.svg'">
+                    <div class="player-card-info">
+                        <div class="player-card-name">${p.name}</div>
+                        <div class="${teamSubClass}">${teamSubText}</div>
+                    </div>
+                    <div class="player-card-avg-badge">
+                        <div class="player-card-avg-label">3-Dart AVG</div>
+                        <div class="player-card-avg-val">${p.schnitt > 0 ? p.schnitt.toFixed(2) : '-'}</div>
+                    </div>
+                </div>
+                <div class="player-metrics-grid">
+                    <div class="metric-item">
+                        <div class="metric-val">${p.o9d > 0 ? p.o9d.toFixed(1) : '-'}</div>
+                        <div class="metric-lbl">9d Ø</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-val">${p.o12d > 0 ? p.o12d.toFixed(1) : '-'}</div>
+                        <div class="metric-lbl">12d Ø</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-val">${p.o15d > 0 ? p.o15d.toFixed(1) : '-'}</div>
+                        <div class="metric-lbl">15d Ø</div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-val">${p.o18d > 0 ? p.o18d.toFixed(1) : '-'}</div>
+                        <div class="metric-lbl">18d Ø</div>
+                    </div>
+                </div>
+                <div class="player-extras-grid">
+                    <div class="extra-item">
+                        <div class="extra-val">${bestLegText}</div>
+                        <div class="extra-lbl">⚡ Bestes Leg</div>
+                    </div>
+                    <div class="extra-item">
+                        <div class="form-dots">${formDotsHTML}</div>
+                        <div class="extra-lbl">📈 Form (Letzte Spiele)</div>
+                    </div>
+                </div>
+            `;
+            gridContainer.appendChild(card);
+        });
+
+        // Charts Rendern
+        let spieltagMap = {};
+        teamMatches.forEach(m => {
+            if (!spieltagMap[m.spieltag]) spieltagMap[m.spieltag] = { sum: 0, count: 0 };
+            spieltagMap[m.spieltag].sum += m.avg;
+            spieltagMap[m.spieltag].count++;
+        });
+
+        let sortedSpieltage = Object.keys(spieltagMap).sort((a, b) => parseInt(a) - parseInt(b));
+        let trendLabels = sortedSpieltage.map(s => `Spieltag ${s}`);
+        let trendValues = sortedSpieltage.map(s => spieltagMap[s].sum / spieltagMap[s].count);
+
+        let sum60 = teamMatches.reduce((acc, m) => acc + m.s60, 0);
+        let sum80 = teamMatches.reduce((acc, m) => acc + m.s80, 0);
+        let sum100 = teamMatches.reduce((acc, m) => acc + m.s100, 0);
+        let sum140 = teamMatches.reduce((acc, m) => acc + m.s140, 0);
+        let sum180 = teamMatches.reduce((acc, m) => acc + m.s180, 0);
+
+        renderChart('teamTrendChart', 'line', trendLabels, trendValues, 'Team AVG', '#FFCC00', false);
+        renderChart('teamScoringChart', 'bar', ['60+', '80+', '100+', '140+', '180'], [sum60, sum80, sum100, sum140, sum180], 'Anzahl', '#FFCC00', true);
+    }
+
+    function renderChart(canvasId, type, labels, data, labelName, color, addGrace) {
+        if (chartsInstances[canvasId]) {
+            chartsInstances[canvasId].destroy();
+        }
+
+        const ctx = document.getElementById(canvasId).getContext('2d');
+        chartsInstances[canvasId] = new Chart(ctx, {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: labelName,
+                    data: data,
+                    backgroundColor: color,
+                    borderColor: color,
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: type === 'line' ? 4 : undefined
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: { labels: { color: '#f0f0f0', font: { size: 11 } } }
+                },
+                scales: {
+                    x: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: '#333' } },
+                    y: { 
+                        ticks: { color: '#888', font: { size: 10 } }, 
+                        grid: { color: '#333' },
+                        grace: addGrace ? '15%' : undefined
+                    }
+                }
+            }
+        });
+    }
+</script>
+</body>
+</html>
