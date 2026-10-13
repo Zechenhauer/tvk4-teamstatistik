@@ -76,6 +76,63 @@
             box-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
 
+        /* Besucher & Diagramm Steuerung oben */
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+
+        .visitor-counter-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: #111;
+            border: 1px solid var(--border-color);
+            padding: 6px 14px;
+            border-radius: 20px;
+        }
+        .visitor-counter-box .label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; font-weight: bold; }
+        .visitor-counter-box .count-value { font-size: 0.9rem; color: var(--accent-gold); font-weight: bold; font-family: monospace; }
+
+        .chart-trigger-btn {
+            background: #111;
+            border: 1px solid var(--accent-gold);
+            color: var(--accent-gold);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+        }
+        .chart-trigger-btn:hover { background: var(--accent-gold); color: #0b0b0b; }
+
+        /* Besucher-Diagramm Dropdown */
+        #visitorChartContainer {
+            display: none;
+            width: 100%;
+            background: #111;
+            border: 1px solid var(--accent-gold);
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        #visitorChartContainer h4 {
+            color: var(--accent-gold);
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            margin: 0 0 8px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
         /* Team Statistik-Kachel */
         .team-stats-card {
             background: linear-gradient(135deg, rgba(221, 0, 0, 0.15), rgba(255, 204, 0, 0.15));
@@ -97,6 +154,8 @@
             align-items: center;
             border-bottom: 1px solid rgba(255, 255, 255, 0.15);
             padding-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 8px;
         }
 
         .team-stats-grid {
@@ -369,6 +428,24 @@
     <!-- Banner-Grafik Team 4 -->
     <img src="https://lhusylpjnujlqomougmg.supabase.co/storage/v1/object/public/Bilder/tv%20kapellen%204.png" alt="TV Kapellen 4 Banner" class="banner-header">
 
+    <!-- Besucherzähler & Diagramm Trigger Steuerung -->
+    <div class="controls-row">
+        <div class="visitor-counter-box">
+            <span class="label">👁️ Aufrufe:</span>
+            <span id="totalVisitorCountDisplay" class="count-value">1</span>
+        </div>
+        <button class="chart-trigger-btn" onclick="toggleVisitorChart()">📊 Aufruf-Diagramm</button>
+    </div>
+
+    <!-- Aufruf-Diagramm Container (Aufklappbar) -->
+    <div id="visitorChartContainer">
+        <h4>
+            <span>📈 Tägliche Seitenaufrufe (letzte 7 Tage)</span>
+            <span style="font-size: 0.7rem; color: var(--text-muted); cursor: pointer;" onclick="toggleVisitorChart()">✖ Schließen</span>
+        </h4>
+        <canvas id="visitorChart" style="max-height: 160px; width: 100%;"></canvas>
+    </div>
+
     <!-- Team Statistik-Kachel -->
     <div class="team-stats-card">
         <div class="team-stats-header">
@@ -436,11 +513,82 @@
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     let chartsInstances = {};
+    let visitorChartInstance = null;
+    let isChartOpen = false;
+
+    // Besucherzähler & Diagramm-Logik
+    function trackVisitor() {
+        let today = new Date().toISOString().split('T')[0];
+        let visitorData = JSON.parse(localStorage.getItem('tvk_team4_visitor_stats') || '{}');
+        visitorData[today] = (visitorData[today] || 0) + 1;
+        localStorage.setItem('tvk_team4_visitor_stats', JSON.stringify(visitorData));
+
+        let totalVisits = Object.values(visitorData).reduce((a, b) => a + b, 0);
+        let displayElement = document.getElementById('totalVisitorCountDisplay');
+        if (displayElement) {
+            displayElement.innerText = totalVisits;
+        }
+    }
+
+    function toggleVisitorChart() {
+        let container = document.getElementById('visitorChartContainer');
+        isChartOpen = !isChartOpen;
+        if (isChartOpen) {
+            container.style.display = 'block';
+            renderVisitorChart();
+        } else {
+            container.style.display = 'none';
+        }
+    }
+
+    function renderVisitorChart() {
+        let visitorData = JSON.parse(localStorage.getItem('tvk_team4_visitor_stats') || '{}');
+        let labels = [];
+        let dataValues = [];
+        
+        for (let i = 6; i >= 0; i--) {
+            let d = new Date();
+            d.setDate(d.getDate() - i);
+            let dateStr = d.toISOString().split('T')[0];
+            let displayLabel = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+            
+            labels.push(displayLabel);
+            dataValues.push(visitorData[dateStr] || 0);
+        }
+
+        const ctx = document.getElementById('visitorChart').getContext('2d');
+        if (visitorChartInstance) {
+            visitorChartInstance.destroy();
+        }
+
+        visitorChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Seitenaufrufe',
+                    data: dataValues,
+                    backgroundColor: '#FFCC00',
+                    borderColor: '#DD0000',
+                    borderWidth: 1,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: '#888', font: { size: 10 } }, grid: { color: '#333' } },
+                    y: { ticks: { color: '#888', font: { size: 10 }, stepSize: 1 }, grid: { color: '#333' }, beginAtZero: true }
+                }
+            }
+        });
+    }
 
     const valueAboveBarPlugin = {
         id: 'valueAboveBar',
         afterDatasetsDraw(chart) {
-            if (chart.config.type !== 'bar') return;
+            if (chart.config.type !== 'bar' || chart.canvas.id === 'visitorChart') return;
             const { ctx } = chart;
             chart.data.datasets.forEach((dataset, i) => {
                 const meta = chart.getDatasetMeta(i);
@@ -483,6 +631,7 @@
     Chart.register(valueAboveBarPlugin, valueAbovePointPlugin);
 
     window.onload = function() {
+        trackVisitor();
         loadTeamDashboardData();
     };
 
@@ -490,7 +639,6 @@
         if (!name) return "";
         let n = name.trim();
         if (n.toLowerCase() === "patrik seitz") return "Patrick Seitz";
-        // Korrektur für Tippfehler in den Rohdaten: "Heinz Lukat" wird direkt auf "Heinz Lukas" gemappt
         if (n.toLowerCase() === "heinz lukat") return "Heinz Lukas";
         return n;
     }
@@ -537,7 +685,6 @@
             return isNaN(num) ? 0 : parseFloat(num.toFixed(1));
         };
 
-        // Feste Stammspieler für Team 4 definieren
         let festeStammSpieler = ["heinz lukas"];
 
         let team4PlayerNames = [];
@@ -551,7 +698,6 @@
             }
         });
 
-        // Feste Stammspieler zwingend aufnehmen
         festeStammSpieler.forEach(stammName => {
             let found = playerStatsRows.find(row => normalizeName(row.name || row.spieler).toLowerCase() === stammName);
             if (found) {
@@ -649,7 +795,6 @@
             });
         });
 
-        // Top Match-Bilanzen gruppieren nach gleicher Bilanz
         let allPlayerBilanzen = Object.entries(playerMatchStats).map(([name, stats]) => {
             let total = stats.wins + stats.losses;
             let winRate = total > 0 ? stats.wins / total : 0;
@@ -696,7 +841,6 @@
         }
         document.getElementById('teamStatTop3Container').innerHTML = top3HTML;
 
-        // Meiste 180er ermitteln
         let top180Player = "-";
         let top180Total = 0;
         Object.entries(player180Counts).forEach(([name, count]) => {
@@ -706,7 +850,6 @@
             }
         });
 
-        // Meiste 140er ermitteln (Sammeln aller Spieler mit Bestwert)
         let max140Val = 0;
         let top140PlayersMap = {};
         Object.entries(player140Counts).forEach(([name, count]) => {
@@ -744,7 +887,6 @@
         `;
         document.getElementById('teamStatHighlightsContainer').innerHTML = highlightsHTML;
 
-        // Spieler-Karten aufbereiten
         let teamPlayerStats = [];
         let dbStatsMap = {};
         playerStatsRows.forEach(row => {
@@ -753,7 +895,6 @@
         });
 
         team4PlayerNames.forEach(name => {
-            // Ignoriere den Duplikat-Namen falls er irgendwo isoliert hängen sollte
             if (name.toLowerCase() === "heinz lukat") return;
 
             let dbRow = dbStatsMap[name.toLowerCase()] || {};
@@ -785,7 +926,6 @@
         document.getElementById('teamStatWDL').innerText = `${totalWins}-${totalLosses}`;
         document.getElementById('teamStatAvg').innerText = overallTeamAvg > 0 ? overallTeamAvg.toFixed(2) : '0.00';
 
-        // Grafische Spieler-Karten rendern
         const gridContainer = document.getElementById('playersGridContainer');
         gridContainer.innerHTML = '';
 
@@ -860,7 +1000,6 @@
             gridContainer.appendChild(card);
         });
 
-        // Charts Rendern
         let spieltagMap = {};
         teamMatches.forEach(m => {
             if (!spieltagMap[m.spieltag]) spieltagMap[m.spieltag] = { sum: 0, count: 0 };
